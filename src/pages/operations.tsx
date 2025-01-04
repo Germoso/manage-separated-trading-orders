@@ -5,8 +5,9 @@ import {
   TableColumn,
   TableBody,
   TableRow,
-  TableCell, getKeyValue,
-  Tooltip
+  TableCell, Tooltip,
+  Select,
+  SelectItem
 } from "@nextui-org/react";
 import { CreatePositionModal } from '@/components/CreatePositionModal';
 import { CreatePositionModalContext } from '@/context/CreatePositionModalContext';
@@ -18,6 +19,7 @@ import { GETAllPositionsResponse } from '@/api/position/GETAllPositionsResponse'
 import { DeleteIcon } from '@/components/DeleteIcon';
 import { CloseIcon } from '@/components/CloseIcon';
 import { ClosePositionModal } from '@/components/ClosePositionModal';
+import { DeletePositionModal } from '@/components/DeletePositionModal';
 
 interface Column {
   name: string;
@@ -36,6 +38,20 @@ export const columns: Column[] = [
   {name: "Actions", uid: "actions"},
 ];
 
+
+type PositionStatus = "OPEN" | "CLOSED";
+type GeneralStatus = "ACTIVE" | "INACTIVE";
+
+interface PositionStatusOption {
+  key: PositionStatus;
+  label: string;
+}
+
+export const positionStatuses: PositionStatusOption[] = [
+  { key: "OPEN", label: "Open" },
+  { key: "CLOSED", label: "Closed" },
+];
+
 export function capitalize(s: string) {
   return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : "";
 }
@@ -49,6 +65,12 @@ interface PositionRow {
   current: number;
   pnl: number;
   actions: string;
+  status: GeneralStatus;
+  positionStatus: PositionStatus;
+}
+
+interface Filters {
+  positionStatus: PositionStatus;
 }
 
 export default function Operations() {
@@ -56,9 +78,13 @@ export default function Operations() {
   const [modalOpen, setModalOpen] = useState({
     // createPosition: false,
     closePosition: false,
+    deletePosition: false,
+  });
+  const [filters, setFilters] = useState<Filters>({
+    positionStatus: "OPEN",
   });
   const [selectedPosition, setSelectedPosition] = useState<string | null>(null);
-  const { data: positions, mutate } = useSWR<GETAllPositionsResponse>('/position', swrFetcher, {
+  const { data: positions, mutate } = useSWR<GETAllPositionsResponse>(`/position?positionStatus=${filters.positionStatus}`, swrFetcher, {
     revalidateIfStale: false,
     revalidateOnFocus: false,
     revalidateOnMount: true,
@@ -81,17 +107,18 @@ export default function Operations() {
       // type: capitalize(position.ticker.symbol),
       ammount: position.quantity,
       price: position.price,
-      pnl: parseFloat(calculatePnL(position.price, position.ticker.price, position.quantity).toFixed(2)),
+      pnl: calculatePnL(position.price, position.ticker.price, position.quantity),
       current: position.ticker.price,
       actions: "View",
+      status: position.generalStatus,
+      positionStatus: position.positionStatus
     }));
-    console.log('Actualizando rows', updatedRows);
     setRows(updatedRows);
   }, [positions]);
 
-  const renderCell = useCallback((rows: { [x: string]: any; }, columnKey: string | number) => {
+  const renderCell = useCallback((rows: PositionRow, columnKey: keyof PositionRow) => {
     const cellValue = rows[columnKey];
-
+    console.log('rpw', rows);
     switch (columnKey) {
       case "actions":
         return (
@@ -102,36 +129,46 @@ export default function Operations() {
               </span>
             </Tooltip> */}
             <Tooltip color="danger" content="Delete position">
-              <span className="text-lg text-danger cursor-pointer active:opacity-50">
-                <DeleteIcon />
-              </span>
-            </Tooltip>
-            <Tooltip color="danger" content="Close position">
-              <button
+            <button
                 onClick={() => {
                   setSelectedPosition(rows.id);
-                  setModalOpen({ ...modalOpen, closePosition: true });
+                  setModalOpen({ ...modalOpen, deletePosition: true });
                 }}
                 className="text-lg text-danger cursor-pointer active:opacity-50"
               >
-                <CloseIcon />
+                <DeleteIcon />
               </button>
             </Tooltip>
+            {rows.positionStatus === 'OPEN' &&
+              <Tooltip color="danger" content="Close position">
+                <button
+                  onClick={() => {
+                    setSelectedPosition(rows.id);
+                    setModalOpen({ ...modalOpen, closePosition: true });
+                  }}
+                  className="text-lg text-danger cursor-pointer active:opacity-50"
+                >
+                  <CloseIcon />
+                </button>
+              </Tooltip>
+            }
           </div>
         );
       default:
         return cellValue;
     }
-  }, []);
+  }, [rows]);
 
   return (
     <>
       <CreatePositionModal
+        refresh={mutate}
         isOpen={createPositionModalContext.isOpen}
         onClose={createPositionModalContext.closeModal}
         onOpen={createPositionModalContext.openModal}
       />
       <ClosePositionModal
+        refresh={mutate}
         isOpen={modalOpen.closePosition}
         onClose={() => {
           setModalOpen({ ...modalOpen, closePosition: false })
@@ -140,14 +177,28 @@ export default function Operations() {
         onOpen={() => setModalOpen({ ...modalOpen, closePosition: true })}
         positionId={selectedPosition}
       />
-      <Table topContent={<TopContent/>} aria-label="Example table with dynamic content">
+      <DeletePositionModal
+        refresh={mutate}
+        isOpen={modalOpen.deletePosition}
+        onClose={() => {
+          setModalOpen({ ...modalOpen, deletePosition: false })
+          setSelectedPosition(null);
+        }}
+        onOpen={() => setModalOpen({ ...modalOpen, deletePosition: true })}
+        positionId={selectedPosition}
+      />
+      <Table
+        topContent={
+          <TopContent setFilters={setFilters} />
+        }
+        aria-label="Example table with dynamic content">
         <TableHeader columns={columns}>
           {(column) => <TableColumn key={column.uid}>{column.name}</TableColumn>}
         </TableHeader>
         <TableBody items={rows}>
           {(item) => (
             <TableRow key={item.id}>
-              {(columnKey) => <TableCell>{renderCell(item, columnKey)}</TableCell>}
+              {(columnKey) => <TableCell>{renderCell(item, columnKey as keyof PositionRow)}</TableCell>}
             </TableRow>
           )}
         </TableBody>
@@ -156,11 +207,22 @@ export default function Operations() {
   );
 }
 
-const TopContent = () => {
+interface TopContentProps {
+  setFilters: (filters: { positionStatus: PositionStatus }) => void;
+}
+
+const TopContent = ({ setFilters } : TopContentProps) => {
   const createPositionModalContext = useContext(CreatePositionModalContext);
 
   return (
     <div className="flex flex-row gap-4 justify-end">
+      <Select className="max-w-xs" placeholder="Select position status" onChange={(e) => {
+        setFilters({ positionStatus: e.target.value as unknown as PositionStatus || 'OPEN' });
+      }}>
+        {positionStatuses.map((status) => (
+          <SelectItem key={status.key}>{status.label}</SelectItem>
+        ))}
+      </Select>
       <Button onClick={createPositionModalContext.openModal} className='w-fit'>
         Agregar posición
       </Button>

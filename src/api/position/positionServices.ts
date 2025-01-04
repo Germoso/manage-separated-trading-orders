@@ -20,3 +20,13 @@ export const closePositionRequest = async (positionId: string) => {
     throw error;
   }
 };
+
+export const deletePositionRequest = async (positionId: string) => {
+  try {
+    const response = await axiosInstance.delete(`/position/${positionId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error deleting position request:', error);
+    throw error;
+  }
+};

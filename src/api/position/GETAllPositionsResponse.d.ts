@@ -1,9 +1,11 @@
 export type GETAllPositionsResponse = Array<{
-  id:       string;
-  account:  Account;
-  price:    number;
-  quantity: number;
-  ticker:   Ticker;
+  id:             string;
+  account:        Account;
+  price:          number;
+  quantity:       number;
+  ticker:         Ticker;
+  positionStatus: PositionStatus;
+  generalStatus:  GeneralStatus;
 }>
 
 export interface Account {
@@ -13,5 +15,8 @@ export interface Account {
 export interface Ticker {
   id:     string;
   symbol: string;
-  price: number;
+  price:  number;
 }
+
+type PositionStatus = "OPEN" | "CLOSED";
+type GeneralStatus = "ACTIVE" | "INACTIVE";

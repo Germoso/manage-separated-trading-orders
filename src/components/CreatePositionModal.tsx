@@ -17,6 +17,7 @@ import { createPositionRequest } from '@/api/position/positionServices';
 
 interface CreatePositionModalProps {
   isOpen: boolean;
+  refresh: () => void;
   onOpen: () => void;
   onClose: () => void;
 }
@@ -36,21 +37,21 @@ interface CreatePositionFormValues {
   // type: string;
 }
 
-export function CreatePositionModal ({ isOpen, onClose }: CreatePositionModalProps) {
+export function CreatePositionModal ({ isOpen, onClose, refresh }: CreatePositionModalProps) {
   const { data: tickers } = useSWR<GETAllTickers>('/ticker', swrFetcher)
   const { register, handleSubmit, formState: { errors }, setValue, getValues} = useForm({
     resolver: yupResolver(schema)
   })
 
   const onSubmit = async (data: CreatePositionFormValues) => {
-    const response = await createPositionRequest({
+    await createPositionRequest({
       accountId: '6776db61f909e939f8e75d79',
       tickerId: data.tickerId,
       quantity: data.ammount,
       price: data.price
     })
 
-    console.log(response)
+    refresh()
   };
 
   return (
